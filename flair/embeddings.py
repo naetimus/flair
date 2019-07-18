@@ -873,7 +873,7 @@ class ELMoTransformerEmbeddings(TokenEmbeddings):
 
 
 class TransformerXLEmbeddings(TokenEmbeddings):
-    def __init__(self, model: str = "transfo-xl-wt103", layers: str = "-1"):
+    def __init__(self, model: str = "transfo-xl-wt103", layers: str = "1,2,3"):
         """Transformer-XL embeddings, as proposed in Dai et al., 2019.
         :param model: name of Transformer-XL model
         :param layers: comma-separated list of layers
