@@ -1024,10 +1024,14 @@ class XLNetEmbeddings(TokenEmbeddings):
 
 class OpenAIGPTEmbeddings(TokenEmbeddings):
     def __init__(
-        self, model: str = "openai-gpt", pooling_operation: str = "first_last"
+        self,
+        model: str = "openai-gpt",
+        layers: str = "1",
+        pooling_operation: str = "first_last",
     ):
         """OpenAI GPT embeddings, as proposed in Radford et al. 2018.
         :param model: name of OpenAI GPT model
+        :param layers: comma-separated list of layers
         :param pooling_operation: defines pooling operation for subwords
         """
         super().__init__()
@@ -1036,10 +1040,13 @@ class OpenAIGPTEmbeddings(TokenEmbeddings):
             raise ValueError("Provided OpenAI GPT model is not available.")
 
         self.tokenizer = OpenAIGPTTokenizer.from_pretrained(model)
-        self.model = OpenAIGPTModel.from_pretrained(model)
+        self.model = OpenAIGPTModel.from_pretrained(
+            pretrained_model_name_or_path=model, output_hidden_states=True
+        )
         self.name = model
-        self.static_embeddings = True
+        self.layers: List[int] = [int(layer) for layer in layers.split(",")]
         self.pooling_operation = pooling_operation
+        self.static_embeddings = True
 
         dummy_sentence: Sentence = Sentence()
         dummy_sentence.add_token(Token("hello"))
@@ -1060,33 +1067,39 @@ class OpenAIGPTEmbeddings(TokenEmbeddings):
             for sentence in sentences:
                 for token in sentence.tokens:
                     token_text = token.text
-
                     subwords = self.tokenizer.tokenize(token_text)
                     indexed_tokens = self.tokenizer.convert_tokens_to_ids(subwords)
                     tokens_tensor = torch.tensor([indexed_tokens])
                     tokens_tensor = tokens_tensor.to(flair.device)
 
-                    hidden_states = self.model(tokens_tensor)
+                    _, hidden_states = self.model(tokens_tensor)
 
-                    if self.pooling_operation == "first":
-                        # Use embedding of first subword
-                        token.set_embedding(self.name, hidden_states[0][0])
-                    elif self.pooling_operation == "last":
-                        last_embedding = hidden_states[0][len(hidden_states[0]) - 1]
-                        token.set_embedding(self.name, last_embedding)
-                    elif self.pooling_operation == "first_last":
-                        # Use embedding of first and last subword
-                        first_embedding = hidden_states[0][0]
-                        last_embedding = hidden_states[0][len(hidden_states[0]) - 1]
-                        final_embedding = torch.cat([first_embedding, last_embedding])
-                        token.set_embedding(self.name, final_embedding)
-                    else:
-                        # Otherwise, use mean over all subwords in token
-                        all_embeddings = [
-                            embedding.unsqueeze(0) for embedding in hidden_states[0]
-                        ]
-                        mean = torch.mean(torch.cat(all_embeddings, dim=0), dim=0)
-                        token.set_embedding(self.name, mean)
+                    subtoken_embeddings = []
+
+                    for layer in self.layers:
+                        first_embedding = hidden_states[layer][0][0]
+                        if self.pooling_operation == "first_last":
+                            last_embedding = hidden_states[layer][0][-1]
+                            final_embedding = torch.cat(
+                                [first_embedding, last_embedding]
+                            )
+                        elif self.pooling_operation == "last":
+                            final_embedding = hidden_states[layer][0][-1]
+                        elif self.pooling_operation == "mean":
+                            all_embeddings = [
+                                embedding.unsqueeze(0)
+                                for embedding in hidden_states[layer][0]
+                            ]
+                            final_embedding = torch.mean(
+                                torch.cat(all_embeddings, dim=0), dim=0
+                            )
+                        else:
+                            final_embedding = first_embedding
+
+                        subtoken_embeddings.append(final_embedding)
+
+                    final_subtoken_embedding = torch.cat(subtoken_embeddings)
+                    token.set_embedding(self.name, final_subtoken_embedding)
 
         return sentences
 
