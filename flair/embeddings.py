@@ -1034,6 +1034,7 @@ class XLNetEmbeddings(TokenEmbeddings):
     def __str__(self):
         return self.name
 
+
 class XLMEmbeddings(TokenEmbeddings):
     def __init__(
         self,
@@ -1121,6 +1122,7 @@ class XLMEmbeddings(TokenEmbeddings):
 
     def __str__(self):
         return self.name
+
 
 class OpenAIGPTEmbeddings(TokenEmbeddings):
     def __init__(
@@ -1285,7 +1287,7 @@ class OpenAIGPT2Embeddings(TokenEmbeddings):
                             final_embedding = first_embedding
 
                         subtoken_embeddings.append(final_embedding)
-                    
+
                     final_subtoken_embedding = torch.cat(subtoken_embeddings)
                     token.set_embedding(self.name, final_subtoken_embedding)
 
@@ -1815,7 +1817,9 @@ class BertEmbeddings(TokenEmbeddings):
         super().__init__()
 
         self.tokenizer = BertTokenizer.from_pretrained(bert_model_or_path)
-        self.model = BertModel.from_pretrained(bert_model_or_path)
+        self.model = BertModel.from_pretrained(
+            pretrained_model_name_or_path=bert_model_or_path, output_hidden_states=True
+        )
         self.layer_indexes = [int(x) for x in layers.split(",")]
         self.pooling_operation = pooling_operation
         self.name = str(bert_model_or_path)
@@ -1923,7 +1927,7 @@ class BertEmbeddings(TokenEmbeddings):
         # put encoded batch through BERT model to get all hidden states of all encoder layers
         self.model.to(flair.device)
         self.model.eval()
-        all_encoder_layers, _ = self.model(
+        _, _, all_encoder_layers = self.model(
             all_input_ids, token_type_ids=None, attention_mask=all_input_masks
         )
 
